@@ -3,30 +3,31 @@
 
 pragma solidity ^0.8.7;
 
-contract Aposta {
+contract Bet {
         
     address public owner;
 
-    uint256 public valorApostadoTotal;
-    uint256 public qtdApostasTotal;
-    string[] public times;
+    uint256 public totalBetValue;
+    uint256 public totalBetsPlaced;
+    string[] public teams;
 
-    struct Time {
-        string nome;
-        uint256 valorApostado;
-        uint256 qtdApostas;
-        bool existe;
-        address[] apostadores;
+    struct Team {
+        string name;
+        uint256 teamTotalBetValue;
+        uint256 betsPlacedCount;
+        bool exists;
+        address[] players;
     }
 
-    struct Apostador {
-        uint256 valorApostado;
-        string time;
+    struct Player {
+        uint256 betValue;
+        string teamName;
+        bool exists;
     }
 
-    mapping(address => Apostador) enderecosApostadores;
+    mapping(address => Player) playersAddresses;
 
-    mapping(string => Time) apostasTimes;
+    mapping(string => Team) teamsBets;
 
 
     modifier isOwner() {
@@ -34,73 +35,80 @@ contract Aposta {
         _;
     }
     
+    modifier canOnlyBetOnce() {
 
-    constructor (string[] memory listaTimes) {
+        Player memory player = playersAddresses[msg.sender];
+        require(!player.exists, "Voce so pode apostar uma vez!");
+        _;
+    }
+
+    constructor (string[] memory teamsList) {
         owner = msg.sender;
-        times = new string[](0);
+        // teamsNames = new string[](0);
 
-        for (uint i=0; i< listaTimes.length; i++) {
+        for (uint i=0; i< teamsList.length; i++) {
 
-            string memory nomeTime = string(listaTimes[i]);
+            string memory teamName = string(teamsList[i]);
 
-            times.push(nomeTime);
+            // teamsNames.push(teamName);
 
-            Time memory novoTime = Time({
-                nome: nomeTime,
-                valorApostado: 0,
-                qtdApostas: 0,
-                existe: true,
-                apostadores: new address[](0)
+            Team memory newTeam = Team({
+                name: teamName,
+                teamTotalBetValue: 0,
+                betsPlacedCount: 0,
+                exists: true,
+                players: new address[](0)
             });
             
-            apostasTimes[nomeTime] = novoTime;
+            teamsBets[teamName] = newTeam;
         }
     }
 
-   function apostar(string calldata time) public payable {
+   function bet(string calldata teamName) public payable canOnlyBetOnce {
 
-        require(apostasTimes[time].existe, "Voce deve apostar em um time cadastrado!");
+        require(teamsBets[teamName].exists, "Voce deve apostar em um Time cadastrado!");
 
-        uint256 valor = msg.value;
-        address apostador = msg.sender;
+        uint256 value = msg.value;
+        address playerAddress = msg.sender;
 
-        Apostador memory novoApostador = Apostador({
-            valorApostado : valor,
-            time: time
+        Player memory newPlayer = Player({
+            betValue: value,
+            teamName: teamName,
+            exists: true
         });
         
-        enderecosApostadores[apostador] = novoApostador;
+        playersAddresses[playerAddress] = newPlayer;
 
-        valorApostadoTotal += valor;
-        qtdApostasTotal++;
+        totalBetValue += value;
+        totalBetsPlaced++;
 
-        Time storage timeApostado = apostasTimes[time];
+        Team storage chosenTeam = teamsBets[teamName];
 
-        timeApostado.valorApostado += valor;
-        timeApostado.qtdApostas++;
-        timeApostado.apostadores.push(apostador);
+        chosenTeam.teamTotalBetValue += value;
+        chosenTeam.betsPlacedCount++;
+        chosenTeam.players.push(playerAddress);
         
-        apostasTimes[time] = timeApostado;
+        teamsBets[teamName] = chosenTeam;
     }
 
-    function encerrarAposta(string memory nomeTimeVencedor) public isOwner {
-        require(apostasTimes[nomeTimeVencedor].existe, "Somente times cadastrados podem vencer!");
+    function payWinners(string memory winningTeamName) public isOwner {
+        require(teamsBets[winningTeamName].exists, "Somente times cadastrados podem vencer!");
 
-        Time memory timeVencedor = apostasTimes[nomeTimeVencedor];
+        Team memory winningTeam = teamsBets[winningTeamName];
 
-        address[] memory apostadoresVencedores = timeVencedor.apostadores;
-        uint256 totalApostasTimeVencedor = timeVencedor.valorApostado;
-        uint256 totalApostasTimesPerdedores = valorApostadoTotal - timeVencedor.valorApostado;
+        address[] memory winners = winningTeam.players;
+        uint256 winningTeamTotalBetsValue = winningTeam.teamTotalBetValue;
+        uint256 losingTeamsTotalBetsValue = totalBetValue - winningTeam.teamTotalBetValue;
 
 
-         for (uint i=0; i< apostadoresVencedores.length; i++) {
+         for (uint i=0; i< winners.length; i++) {
 
-            Apostador memory apostador = enderecosApostadores[apostadoresVencedores[i]];
-            uint256 valorApostado = apostador.valorApostado;
+            Player memory player = playersAddresses[winners[i]];
+            uint256 betValue = player.betValue;
             
-            uint256 valorPagamento = valorApostado + (valorApostado/totalApostasTimeVencedor) * totalApostasTimesPerdedores;
+            uint256 paymentValue = betValue + (betValue/winningTeamTotalBetsValue) * losingTeamsTotalBetsValue;
 
-            payable(apostadoresVencedores[i]).transfer(valorPagamento);
+            payable(winners[i]).transfer(paymentValue);
 
          }        
 
